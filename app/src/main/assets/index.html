@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mora GPU Monitor</title>
+<style>
+:root{--bg:#0b0b0d;--card:#151518;--line:#26262b;--tx:#f2f2f4;--mut:#8d8d96;--ac:#ff3b3b;--acbg:#2a1214;--g:#35d07f;--b:#4aa8ff;--y:#ffb02e}
+@media(prefers-color-scheme:light){:root{--bg:#f4f4f6;--card:#fff;--line:#e2e2e7;--tx:#16161a;--mut:#6b6b75;--acbg:#ffe9e9}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,sans-serif;padding:14px 12px 84px}
+main{max-width:520px;margin:0 auto}
+h1{font-size:18px;margin:2px 0 0}.sub{color:var(--mut);font-size:12px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+.hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.hd b{font-size:13px;letter-spacing:.2px}.hd span{font-size:11px;color:var(--mut)}
+.big{display:flex;gap:18px;align-items:flex-end}
+.big div{min-width:0}.big .v{font-size:26px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
+.big .v small{font-size:12px;font-weight:500;color:var(--mut);margin-left:2px}
+.big .l{font-size:11px;color:var(--mut)}
+canvas{width:100%;height:64px;display:block;margin-top:8px}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-top:8px;font-size:12px}
+.kv span{color:var(--mut)}.kv b{font-weight:600;float:right;font-variant-numeric:tabular-nums}
+.cores{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+.core{font-size:11px;color:var(--mut);text-align:center}
+.core i{display:block;height:44px;border-radius:6px;background:var(--line);position:relative;overflow:hidden;margin-bottom:3px}
+.core i u{position:absolute;left:0;right:0;bottom:0;background:var(--b);transition:height .4s;text-decoration:none}
+.core b{color:var(--tx);font-weight:600}
+.bar{height:8px;border-radius:5px;background:var(--line);overflow:hidden;margin-top:6px}
+.bar u{display:block;height:100%;background:var(--g);transition:width .4s}
+.temps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.t{background:var(--bg);border-radius:10px;padding:8px 4px;text-align:center}
+.t b{display:block;font-size:17px;font-variant-numeric:tabular-nums}.t span{font-size:10px;color:var(--mut)}
+.hot{color:var(--ac)}.warm{color:var(--y)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.g4{grid-template-columns:repeat(4,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
+button{font:inherit;color:var(--tx);background:transparent;border:1px solid var(--line);border-radius:10px;padding:11px 4px;cursor:pointer}
+button:active{transform:scale(.97)}
+button.on{border-color:var(--ac);background:var(--acbg);color:var(--ac);font-weight:600}
+button.busy{opacity:.5;pointer-events:none}
+.pill{font-size:12px;color:var(--ac);font-weight:600}
+.note{color:var(--mut);font-size:12px;margin:6px 0 0}
+pre{margin:6px 0 0;white-space:pre-wrap;word-break:break-all;font-size:11px;color:var(--mut);max-height:220px;overflow:auto}
+details summary{cursor:pointer;color:var(--mut);font-size:12px;padding:6px 0}
+.tz{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:11px;color:var(--mut)}.tz b{color:var(--tx);font-weight:600}
+.tab{display:none}.tab.on{display:block}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;gap:6px;padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--line)}
+nav button{flex:1;border:0;padding:10px 0}
+nav button.on{background:var(--acbg)}
+.demo{display:none;color:var(--y);font-size:11px;margin-left:6px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Mora GPU Monitor<span class="demo" id="demo">DEMO</span></h1>
+  <div class="sub" id="sub">memuat…</div>
+
+  <!-- ===== MONITOR ===== -->
+  <section class="tab on" id="t-mon">
+    <div class="card">
+      <div class="hd"><b>GPU</b><span id="gGov">–</span></div>
+      <div class="big">
+        <div><div class="v" id="gClk">–<small>MHz</small></div><div class="l">Clock</div></div>
+        <div><div class="v" id="gLoad">–<small>%</small></div><div class="l">Beban</div></div>
+        <div><div class="v" id="gTemp">–<small>°C</small></div><div class="l">Suhu</div></div>
+      </div>
+      <canvas id="cGpu"></canvas>
+      <div class="kv">
+        <div><span>Clock maks</span><b id="gMax">–</b></div>
+        <div><span>Level daya</span><b id="gPwr">–</b></div>
+        <div><span>Memori GPU</span><b id="gMem">–</b></div>
+        <div><span>FPS layar</span><b id="gFps">–</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><b>CPU</b><span id="cOn">–</span></div>
+      <div class="big">
+        <div><div class="v" id="cLoad">–<small>%</small></div><div class="l">Beban total</div></div>
+        <div><div class="v" id="cTemp">–<small>°C</small></div><div class="l">Suhu</div></div>
+        <div><div class="v" id="cAvg">–</div><div class="l">Load avg</div></div>
+      </div>
+      <canvas id="cCpu"></canvas>
+      <div class="cores" id="cores"></div>
+      <div class="kv" id="pol"></div>
+      <p class="note">Saat OC aktif, pembacaan clock CPU dikunci ke nilai OC (bukan realtime). Beban per core tetap nyata.</p>
+    </div>
+
+    <div class="card">
+      <div class="hd"><b>Suhu</b><span>°C</span></div>
+      <div class="temps" id="temps"></div>
+      <details><summary>Semua sensor</summary><div class="tz" id="tz"></div></details>
+    </div>
+
+    <div class="card">
+      <div class="hd"><b>Memori</b><span id="mTxt">–</span></div>
+      <div class="bar"><u id="mBar" style="width:0"></u></div>
+      <div class="kv">
+        <div><span>Cache</span><b id="mCache">–</b></div>
+        <div><span>Swap</span><b id="mSwap">–</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><b>Baterai</b><span id="bSt">–</span></div>
+      <div class="big">
+        <div><div class="v" id="bCap">–<small>%</small></div><div class="l">Level</div></div>
+        <div><div class="v" id="bCur">–<small>mA</small></div><div class="l">Arus</div></div>
+        <div><div class="v" id="bVolt">–<small>V</small></div><div class="l">Tegangan</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== OC ===== -->
+  <section class="tab" id="t-oc">
+    <div class="card" id="cpu">
+      <div class="hd"><b>CPU</b><span class="pill" id="cpuNow">…</span></div>
+      <div class="grid">
+        <button data-m="stock">Stock</button><button data-m="24">2.4 GHz</button><button data-m="27">2.7 GHz</button>
+        <button data-m="29">2.9 GHz</button><button data-m="34">3.4 GHz</button><button data-m="39">3.9 GHz</button>
+      </div>
+    </div>
+    <div class="card" id="gpu">
+      <div class="hd"><b>GPU</b><span class="pill" id="gpuNow">…</span></div>
+      <div class="grid g5">
+        <button data-m="stock">Stock</button><button data-m="15">1.5</button><button data-m="17">1.7</button>
+        <button data-m="19">1.9</button><button data-m="20">2.0</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="hd"><b>Log</b><span id="logHint"></span></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <button id="logG">Log GPU</button><button id="logC">Log CPU</button>
+      </div>
+      <pre id="log"></pre>
+    </div>
+    <div class="card"><p class="note" style="margin:0">Pilihan tersimpan dan diterapkan otomatis tiap boot, lalu dijaga tetap aktif. <b>DWYOR</b> – Do With Your Own Risk. Nilai clock ini mengubah pembacaan sysfs; kecepatan fisik tetap dibatasi kernel/hardware.</p></div>
+  </section>
+
+  <!-- ===== INFO ===== -->
+  <section class="tab" id="t-info">
+    <div class="card"><div class="hd"><b>Perangkat</b></div><div class="tz" id="info"></div></div>
+    <div class="card"><p class="note" style="margin:0">Mora GPU Monitor · mora x claude · base GPU OC @modulegaming6969fps</p></div>
+  </section>
+</main>
+
+<nav>
+  <button class="on" data-t="mon">Monitor</button>
+  <button data-t="oc">OC</button>
+  <button data-t="info">Info</button>
+</nav>
+
+<script>
+"use strict";
+const MOD = "/data/adb/modules/Overclock-CpuGpu";
+const $ = s => document.querySelector(s);
+const HAS = typeof ksu !== "undefined" || typeof Android !== "undefined";
+let seq = 0;
+
+/* ---------- jembatan shell (KernelSU WebUI / aplikasi / demo) ---------- */
+function sh(cmd){
+  return new Promise(res=>{
+    if(!HAS){ res({out:demo(cmd)}); return; }
+    const id="cb"+Date.now()+"_"+(seq++);
+    window[id]=(code,out)=>{ delete window[id]; res({code,out:(out||"").trim()}); };
+    try{
+      if(typeof ksu!=="undefined") ksu.exec(cmd,"{}",id); else Android.exec(cmd,id);
+    }catch(e){ delete window[id]; res({out:""}); }
+  });
+}
+function toast(m){ try{ if(typeof ksu!=="undefined") ksu.toast(m); else if(typeof Android!=="undefined") Android.toast(m); }catch(e){} }
+
+/* ---------- util ---------- */
+const hist = {gClk:[],gLoad:[],cLoad:[]}, H = 60;
+const prevStat = {};
+function push(a,v){ a.push(v); if(a.length>H) a.shift(); }
+const num = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function degC(v,deci){ v=num(v); if(v===null) return null; if(deci) return v/10; return Math.abs(v)>=1000? v/1000 : (v>150? v/10 : v); }
+function tclass(t){ return t>=48?"hot":t>=40?"warm":""; }
+function fmtMB(kb){ return (kb/1024/1024).toFixed(2)+" GB"; }
+
+function parse(txt){
+  const o={}, stat={};
+  txt.split("\n").forEach(l=>{
+    const i=l.indexOf("=");
+    if(l.startsWith("stat.")){ const p=l.slice(5).trim().split(/\s+/); stat[p[0]]=p.slice(1).map(Number); return; }
+    if(i>0) o[l.slice(0,i)]=l.slice(i+1).trim();
+  });
+  o._stat=stat; return o;
+}
+
+/* ---------- grafik ---------- */
+function spark(cv, series, opt){
+  const dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight;
+  if(!w) return;
+  if(cv.width!==Math.round(w*dpr)){ cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+  const c=cv.getContext("2d"); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,w,h);
+  c.strokeStyle=css("--line"); c.lineWidth=1; c.beginPath();
+  for(let i=1;i<4;i++){ const y=Math.round(h*i/4)+.5; c.moveTo(0,y); c.lineTo(w,y); } c.stroke();
+  series.forEach((s,k)=>{
+    const d=s.data; if(d.length<2) return;
+    const max=s.max||Math.max(1,...d), step=w/(H-1), off=w-(d.length-1)*step;
+    c.beginPath();
+    d.forEach((v,i)=>{ const x=off+i*step, y=h-2-(Math.min(v,max)/max)*(h-4); i?c.lineTo(x,y):c.moveTo(x,y); });
+    c.strokeStyle=s.color; c.lineWidth=2; c.lineJoin="round"; c.stroke();
+    if(k===0){ c.lineTo(off+(d.length-1)*step,h); c.lineTo(off,h); c.closePath(); c.globalAlpha=.12; c.fillStyle=s.color; c.fill(); c.globalAlpha=1; }
+  });
+}
+
+/* ---------- render ---------- */
+let lastGpuMax = 0, gpuMaxSeen = 0;
+function render(o){
+  /* GPU */
+  let clk = num(o["gpu.clk"]); if(clk===null) clk = num(o["gpu.clk_mali"]);
+  if(clk!==null) clk = clk>1e6 ? clk/1e6 : (clk>1e4 ? clk/1e3 : clk);   // Hz/kHz -> MHz
+  let load = num((o["gpu.busy"]||"").replace("%",""));
+  if(load===null && o["gpu.busyraw"]){ const p=o["gpu.busyraw"].split(/\s+/).map(Number); if(p[1]>0) load=p[0]*100/p[1]; }
+  gpuMaxSeen = Math.max(gpuMaxSeen, clk||0);
+  let gmax = num(o["gpu.maxclk"]); if(gmax!==null) gmax = gmax>1e6?gmax/1e6:gmax;
+  $("#gClk").innerHTML = (clk===null?"–":Math.round(clk))+"<small>MHz</small>";
+  $("#gLoad").innerHTML = (load===null?"–":Math.round(load))+"<small>%</small>";
+  $("#gGov").textContent = o["gpu.gov"]||o["gpu.gov_mali"]||"–";
+  $("#gMax").textContent = gmax? Math.round(gmax)+" MHz":"–";
+  $("#gPwr").textContent = o["gpu.pwr"]||"–";
+  const gm = num(o["gpu.mem"]); $("#gMem").textContent = gm!==null? (gm/1048576).toFixed(0)+" MB":"–";
+  const fps = (o.fps||"").match(/[0-9]+(\.[0-9]+)?/); $("#gFps").textContent = fps? Math.round(fps[0]) : "–";
+  if(clk!==null) push(hist.gClk,clk); if(load!==null) push(hist.gLoad,load);
+
+  /* suhu */
+  const tz=[]; let cpuT=[], gpuT=[], skin=[];
+  Object.keys(o).forEach(k=>{ if(k.startsWith("tz.")){
+    const name=k.replace(/^tz\.\d+\./,""), t=degC(o[k]); if(t===null||t<=0||t>130) return;
+    tz.push([name,t]);
+    if(/cpu|cluster|kryo|silver|gold/i.test(name)) cpuT.push(t);
+    else if(/gpu|gpuss/i.test(name)) gpuT.push(t);
+    else if(/skin|quiet|xo-therm|shell|case/i.test(name)) skin.push(t);
+  }});
+  const maxOf=a=>a.length?Math.max(...a):null;
+  const tC=maxOf(cpuT), tG=maxOf(gpuT), tS=maxOf(skin), tB=degC(o["bat.temp"],true);
+  $("#gTemp").innerHTML=(tG===null?"–":tG.toFixed(0))+"<small>°C</small>";
+  $("#cTemp").innerHTML=(tC===null?"–":tC.toFixed(0))+"<small>°C</small>";
+  const T=[["CPU",tC],["GPU",tG],["Baterai",tB],["Kulit",tS]];
+  $("#temps").innerHTML=T.map(([n,t])=>`<div class="t"><b class="${t===null?"":tclass(t)}">${t===null?"–":t.toFixed(0)}</b><span>${n}</span></div>`).join("");
+  $("#tz").innerHTML=tz.sort((a,b)=>b[1]-a[1]).map(([n,t])=>`<span>${n}</span><b>${t.toFixed(1)}</b>`).join("");
+
+  /* CPU */
+  const st=o._stat, ids=Object.keys(st).filter(k=>k!=="cpu").sort((a,b)=>a.slice(3)-b.slice(3));
+  const calc=k=>{ const c=st[k], idle=c[3]+(c[4]||0), tot=c.reduce((a,b)=>a+b,0), p=prevStat[k]; prevStat[k]=[idle,tot];
+    if(!p||tot===p[1]) return null; return Math.max(0,Math.min(100,100*(1-(idle-p[0])/(tot-p[1])))); };
+  const tot=st.cpu?calc("cpu"):null;
+  if(tot!==null){ push(hist.cLoad,tot); $("#cLoad").innerHTML=Math.round(tot)+"<small>%</small>"; }
+  const cores=ids.map(k=>[k.slice(3),calc(k)]);
+  $("#cores").innerHTML=cores.map(([n,v])=>`<div class="core"><i><u style="height:${v||0}%"></u></i>cpu${n} <b>${v===null?"–":Math.round(v)}</b></div>`).join("");
+  $("#cOn").textContent="online "+(o["cpu.online"]||"–");
+  const la=(o.load||"").split(" "); $("#cAvg").textContent=la[0]||"–";
+  const pols=[...new Set(Object.keys(o).filter(k=>/^cpu\.policy\d+\./.test(k)).map(k=>k.split(".")[1]))].sort();
+  $("#pol").innerHTML=pols.map(p=>{ const c=num(o[`cpu.${p}.cur`]), m=num(o[`cpu.${p}.max`]);
+    return `<div><span>${p}</span><b>${c===null?"–":Math.round(c/1000)} / ${m===null?"–":Math.round(m/1000)} MHz</b></div><div><span>governor</span><b>${o[`cpu.${p}.gov`]||"–"}</b></div>`; }).join("");
+
+  /* memori */
+  const mt=num(o["mem.MemTotal"]), ma=num(o["mem.MemAvailable"]);
+  if(mt){ const used=mt-ma, pc=used*100/mt; $("#mTxt").textContent=fmtMB(used)+" / "+fmtMB(mt); $("#mBar").style.width=pc+"%"; $("#mBar").style.background=pc>85?css("--ac"):css("--g"); }
+  $("#mCache").textContent=o["mem.Cached"]?fmtMB(+o["mem.Cached"]):"–";
+  const sT=num(o["mem.SwapTotal"]), sF=num(o["mem.SwapFree"]);
+  $("#mSwap").textContent=sT?fmtMB(sT-sF)+" / "+fmtMB(sT):"nonaktif";
+
+  /* baterai */
+  $("#bCap").innerHTML=(o["bat.cap"]||"–")+"<small>%</small>";
+  let cur=num(o["bat.cur"]); if(cur!==null) cur=Math.abs(cur)>10000?cur/1000:cur;
+  $("#bCur").innerHTML=(cur===null?"–":Math.round(cur))+"<small>mA</small>";
+  let v=num(o["bat.volt"]); if(v!==null) v=v>1e5?v/1e6:v/1e3;
+  $("#bVolt").innerHTML=(v===null?"–":v.toFixed(2))+"<small>V</small>";
+  $("#bSt").textContent=(o["bat.status"]||"–")+(tB!==null?" · "+tB.toFixed(1)+"°C":"");
+
+  /* OC aktif */
+  paintMode("cpu",o["oc.cpu"]); paintMode("gpu",o["oc.gpu"]);
+
+  /* grafik */
+  spark($("#cGpu"),[{data:hist.gLoad,max:100,color:css("--b")},{data:hist.gClk,max:Math.max(gpuMaxSeen,gmax||0,1)*1.05,color:css("--g")}]);
+  spark($("#cCpu"),[{data:hist.cLoad,max:100,color:css("--ac")}]);
+  $("#sub").textContent = "diperbarui "+new Date().toLocaleTimeString("id-ID")+" · hijau = clock GPU, biru = beban";
+}
+
+/* ---------- loop ---------- */
+let timer=null, tab="mon";
+async function tick(){
+  timer=null;
+  const r=await sh(MOD+"/monitor.sh");
+  if(r.out) render(parse(r.out));
+  if(tab==="mon" && !document.hidden) timer=setTimeout(tick,1000);
+}
+function startLoop(){ if(!timer) tick(); }
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) startLoop(); });
+
+/* ---------- tab ---------- */
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
+  tab=b.dataset.t;
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));
+  document.querySelectorAll(".tab").forEach(s=>s.classList.toggle("on",s.id==="t-"+tab));
+  if(tab==="mon") startLoop(); else tick_once();
+  if(tab==="info") loadInfo();
+});
+async function tick_once(){ const r=await sh(MOD+"/monitor.sh"); if(r.out){ const o=parse(r.out); paintMode("cpu",o["oc.cpu"]); paintMode("gpu",o["oc.gpu"]); } }
+
+/* ---------- OC ---------- */
+const LBL={cpu:{stock:"Stock",24:"2.4 GHz",27:"2.7 GHz",29:"2.9 GHz",34:"3.4 GHz",39:"3.9 GHz"},
+           gpu:{stock:"Stock",15:"1.5 GHz",17:"1.7 GHz",19:"1.9 GHz",20:"2.0 GHz"}};
+function paintMode(kind,m){
+  if(!LBL[kind][m]) m="stock";
+  document.querySelectorAll("#"+kind+" button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
+  $("#"+kind+"Now").textContent=LBL[kind][m];
+}
+["cpu","gpu"].forEach(kind=>{
+  document.querySelectorAll("#"+kind+" button").forEach(b=>{
+    b.onclick=async()=>{
+      const m=b.dataset.m, all=document.querySelectorAll("#"+kind+" button");
+      all.forEach(x=>x.classList.add("busy")); paintMode(kind,m);
+      toast(kind.toUpperCase()+" → "+LBL[kind][m]);
+      await sh("(sh "+MOD+"/"+kind+"-ctl.sh "+m+" >/dev/null 2>&1 &)");
+      if(kind==="cpu"){
+        const g=await sh("[ -f /data/local/tmp/Overclock-Cpu/oc-39.sh ] && echo ok || echo gen");
+        if(g.out==="gen") toast("Menyiapkan skrip CPU, ±1 menit. Lalu otomatis diterapkan.");
+      }
+      setTimeout(()=>{ all.forEach(x=>x.classList.remove("busy")); tick_once(); },kind==="gpu"?4000:2500);
+    };
+  });
+});
+async function showLog(f){ const r=await sh("tail -n 60 "+f+" 2>/dev/null"); $("#log").textContent=r.out||"(kosong)"; }
+$("#logG").onclick=()=>showLog("/data/local/tmp/Overclock-Gpu/last.log");
+$("#logC").onclick=()=>showLog("/data/local/tmp/Overclock-Cpu/cpu.log");
+
+/* ---------- info ---------- */
+let infoDone=false;
+async function loadInfo(){
+  if(infoDone) return; infoDone=true;
+  const r=await sh(MOD+"/monitor.sh info"), o=parse(r.out||"");
+  const rows=[["Model","model"],["SoC","soc"],["Android","android"],["ROM","rom"],["Kernel","kernel"],["GPU","gpu"],["OpenGL ES","gles"],["Vulkan","vulkan"],["Refresh","refresh"]];
+  $("#info").innerHTML=rows.filter(([,k])=>o[k]).map(([n,k])=>`<span>${n}</span><b>${o[k]}</b>`).join("");
+}
+
+/* ---------- data contoh (dibuka di browser biasa) ---------- */
+let dt=0;
+function demo(cmd){
+  if(cmd.indexOf("monitor.sh info")>=0) return "model=Redmi Note 12 Pro 4G\nsoc=SM7150 sdmmagpie\nandroid=17 (SDK 37)\nkernel=4.14.x\ngpu=Adreno (TM) 618\ngles=GLES: Qualcomm, Adreno (TM) 618\nvulkan=adreno\nrefresh=60";
+  if(cmd.indexOf("monitor.sh")<0) return "ok";
+  dt++; const L=40+30*Math.sin(dt/6)+Math.random()*15, C=500+280*Math.abs(Math.sin(dt/9));
+  let s=`gpu.clk=${Math.round(C)*1e6}\ngpu.maxclk=825000000\ngpu.busy=${Math.round(L)} %\ngpu.gov=msm-adreno-tz\ngpu.pwr=2\ngpu.mem=${210e6}\nfps=${55+Math.round(Math.random()*5)}.0\n`;
+  const base={cpu:[1000,2000,3000,4000,5000,6000,7000,8000]};
+  for(let i=0;i<=8;i++){ const k=i===8?"cpu":"cpu"+i, d=[100+Math.random()*30*i,0,50,i===8?900:200+Math.random()*40,5,0,0,0,0,0]; s+=`stat.${k}  ${d.map(Math.round).join(" ")}\n`; }
+  Object.keys(prevStat).forEach(k=>{});
+  s+="cpu.policy0.cur=1804800\ncpu.policy0.max=1804800\ncpu.policy0.gov=schedutil\ncpu.policy6.cur=2300000\ncpu.policy6.max=2300000\ncpu.policy6.gov=schedutil\ncpu.online=0-7\nload=1.82 1.50 1.30\n";
+  s+="mem.MemTotal=7900000\nmem.MemAvailable="+Math.round(3200000+Math.random()*300000)+"\nmem.Cached=2100000\nmem.SwapTotal=4000000\nmem.SwapFree=3500000\n";
+  s+="bat.cap=78\nbat.temp=372\nbat.status=Discharging\nbat.cur=-"+Math.round(400000+Math.random()*100000)+"\nbat.volt=4012000\n";
+  s+=`tz.0.cpu-1-0-usr=${41000+Math.random()*3000}\ntz.1.cpu-1-4-usr=${43000+Math.random()*3000}\ntz.2.gpuss-0-usr=${40000+Math.random()*4000}\ntz.3.quiet-therm=36500\ntz.4.xo-therm=35000\ntz.5.pa-therm0=34000\n`;
+  s+="oc.cpu=29\noc.gpu=20\n"; return s;
+}
+if(!HAS) $("#demo").style.display="inline";
+startLoop();
+</script>
+</body>
+</html>
